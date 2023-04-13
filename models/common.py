@@ -44,7 +44,8 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     # Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)
-    default_act = nn.SiLU()  # default activation
+    # default_act = nn.SiLU()  # default activation
+    default_act = nn.ReLU()
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         super().__init__()
@@ -57,6 +58,48 @@ class Conv(nn.Module):
 
     def forward_fuse(self, x):
         return self.act(self.conv(x))
+    
+# kernel size 3, stride 1, padding 1 and maxpooling class
+import torch.nn as nn
+
+class Conv3x3(nn.Module):
+    # Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)
+    # default_act = nn.SiLU()  # default activation
+    default_act = nn.ReLU()
+
+    def __init__(self, c1, c2, k=3, s=1, p=2, g=1, d=1, act=True):
+        super().__init__()
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+    def forward_fuse(self, x):
+        return self.act(self.conv(x))
+    
+# kernel size 3, stride 1, padding 1 and maxpooling class
+import torch.nn as nn
+
+    
+# kernel size 1, stride 1, padding 0 and maxpooling class
+import torch.nn as nn
+
+class Conv1x1(nn.Module):
+    def __init__(self, c1, c2, s=1, p=None, g=1, d=1, act=True):
+        super().__init__()
+        self.default_act = nn.ReLU(inplace=True)
+        self.conv = nn.Conv2d(c1, c2, 1, s, p, groups=g, dilation=d, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+    def forward_fuse(self, x):
+        return self.act(self.conv(x))
+
 
 
 class DWConv(Conv):
@@ -198,6 +241,35 @@ class C3Ghost(C3):
         c_ = int(c2 * e)  # hidden channels
         self.m = nn.Sequential(*(GhostBottleneck(c_, c_) for _ in range(n)))
 
+# class MaxPooling(nn.Module):
+#     def __init__(self, kernel_size, stride, padding):
+#         super().__init__()
+#         self.maxpool = nn.MaxPool2d(kernel_size, stride, padding)
+
+#     def forward(self, x):
+#         return self.maxpool(x)
+
+class MaxPooling(nn.Module):
+    def __init__(self, c1, c2, k=2, s=2, p=0):
+        super().__init__()
+        self.m = nn.MaxPool2d(kernel_size=k, stride=s, padding=p)
+        self.cv1 = Conv(c1, c2, 1, 1)
+
+    def forward(self, x):
+        x = self.m(x)
+        x = self.cv1(x)
+        return x
+
+    
+# Fully Connected Layer with 50% dropout
+# class FC(nn.Module):
+#     def __init__(self, in_features, out_features):
+#         super().__init__()
+#         self.fc = nn.Linear(in_features, out_features)
+#         self.dropout = nn.Dropout(0.5)
+
+#     def forward(self, x):
+#         return self.dropout(self.fc(x))
 
 class SPP(nn.Module):
     # Spatial Pyramid Pooling (SPP) layer https://arxiv.org/abs/1406.4729
@@ -310,6 +382,9 @@ class Concat(nn.Module):
 
     def forward(self, x):
         return torch.cat(x, self.d)
+
+
+
 
 
 class DetectMultiBackend(nn.Module):
